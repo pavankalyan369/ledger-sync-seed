@@ -78,18 +78,34 @@ public final class SqlLedgerStore implements LedgerStore, AutoCloseable {
 
     @Override
     public void save(NormalizedTxn t) {
-        try (PreparedStatement ps = conn.prepareStatement(
-                "INSERT INTO ledger(account_last4, occurred_at, direction, amount,"
-                        + " category, merchant, source_message_ids)"
-                        + " VALUES (?,?,?,?,?,?,?)")) {
-            ps.setString(1, t.accountLast4());
-            ps.setString(2, t.occurredAt().toString());
-            ps.setString(3, t.direction().name());
-            ps.setBigDecimal(4, t.amount());
-            ps.setString(5, t.category().name());
-            ps.setString(6, t.merchant());
-            ps.setString(7, String.join(",", t.sourceMessageIds()));
-            ps.executeUpdate();
+        try {
+            for (String sourceMessageId : t.sourceMessageIds()) {
+                try (PreparedStatement check = conn.prepareStatement(
+                        "SELECT 1 FROM ledger "
+                                + "WHERE ',' || source_message_ids || ',' LIKE '%,' || ? || ',%'")) {
+                    check.setString(1, sourceMessageId);
+
+                    try (ResultSet rs = check.executeQuery()) {
+                        if (rs.next()) {
+                            return;
+                        }
+                    }
+                }
+            }
+
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO ledger(account_last4, occurred_at, direction, amount,"
+                            + " category, merchant, source_message_ids)"
+                            + " VALUES (?,?,?,?,?,?,?)")) {
+                ps.setString(1, t.accountLast4());
+                ps.setString(2, t.occurredAt().toString());
+                ps.setString(3, t.direction().name());
+                ps.setBigDecimal(4, t.amount());
+                ps.setString(5, t.category().name());
+                ps.setString(6, t.merchant());
+                ps.setString(7, String.join(",", t.sourceMessageIds()));
+                ps.executeUpdate();
+            }
         } catch (SQLException e) {
             throw new IllegalStateException("could not save " + t, e);
         }
