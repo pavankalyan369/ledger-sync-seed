@@ -45,4 +45,28 @@ class AmountsTest {
     void ignoresAMessageWithNoAmountAtAll() {
         assertEquals(null, Amounts.first("Your Swiggy order is on the way!"));
     }
+
+
+    @Test
+    void readsWholeRupeeAmountBeforeStatedBalance() {
+        assertEquals(
+                new BigDecimal("5.00"),
+                Amounts.first(
+                        "Rs.5 debited from a/c **4821 on 04-07-26 at 07:19 "
+                                + "to UPI/WATER CAN. Avl Bal: Rs.92,213.10."
+                )
+        );
+    }
+
+    @Test
+    void readsWholeInrAmount() {
+        assertEquals(
+                new BigDecimal("25.00"),
+                Amounts.first(
+                        "Dear Customer, Acct XX9075 is debited with INR 25 "
+                                + "on 04/07/2026 07:54. Info: UPI/STATIONERY. "
+                                + "Avl Bal Rs.49,857.25"
+                )
+        );
+    }
 }
