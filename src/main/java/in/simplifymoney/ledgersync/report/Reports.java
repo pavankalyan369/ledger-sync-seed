@@ -3,11 +3,11 @@ package in.simplifymoney.ledgersync.report;
 import in.simplifymoney.ledgersync.model.Category;
 import in.simplifymoney.ledgersync.model.Direction;
 import in.simplifymoney.ledgersync.model.NormalizedTxn;
+import in.simplifymoney.ledgersync.parse.ParsedTxn;
+
 import java.math.BigDecimal;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.TreeSet;
+import java.util.*;
+
 
 /**
  * The two reports the assignment asks for.
@@ -25,28 +25,50 @@ public final class Reports {
 
     public static Map<String, Object> summary(List<NormalizedTxn> ledger) {
         Map<String, Object> accounts = new LinkedHashMap<>();
+
         for (String acct : new TreeSet<>(ledger.stream()
-                .map(NormalizedTxn::accountLast4).toList())) {
+                .map(NormalizedTxn::accountLast4)
+                .toList())) {
 
             BigDecimal spend = ZERO;
             BigDecimal income = ZERO;
+            BigDecimal microTotal = ZERO;
+            BigDecimal transferredOut = ZERO;
+            BigDecimal transferredIn = ZERO;
+            int microCount = 0;
+
             for (NormalizedTxn t : ledger) {
-                if (!t.accountLast4().equals(acct)) continue;
-                if (t.direction() == Direction.DEBIT) spend = spend.add(t.amount());
-                else income = income.add(t.amount());
+                if (!t.accountLast4().equals(acct)) {
+                    continue;
+                }
+
+                if (t.category() == Category.SPEND) {
+                    spend = spend.add(t.amount());
+                } else if (t.category() == Category.INCOME) {
+                    income = income.add(t.amount());
+                } else if (t.category() == Category.MICRO) {
+                    microCount++;
+                    microTotal = microTotal.add(t.amount());
+                } else if (t.category() == Category.TRANSFER) {
+                    if (t.direction() == Direction.DEBIT) {
+                        transferredOut = transferredOut.add(t.amount());
+                    } else {
+                        transferredIn = transferredIn.add(t.amount());
+                    }
+                }
             }
 
             Map<String, Object> a = new LinkedHashMap<>();
             a.put("spend", spend.toPlainString());
             a.put("income", income.toPlainString());
-            // TODO micro spends are still counted inside spend, and are not rolled up
-            a.put("micro_count", 0);
-            a.put("micro_total", ZERO.toPlainString());
-            // TODO transfers are still counted as spend and income
-            a.put("transferred_out", ZERO.toPlainString());
-            a.put("transferred_in", ZERO.toPlainString());
+            a.put("micro_count", microCount);
+            a.put("micro_total", microTotal.toPlainString());
+            a.put("transferred_out", transferredOut.toPlainString());
+            a.put("transferred_in", transferredIn.toPlainString());
+
             accounts.put(acct, a);
         }
+
         Map<String, Object> doc = new LinkedHashMap<>();
         doc.put("accounts", accounts);
         return doc;
@@ -69,8 +91,134 @@ public final class Reports {
         return doc;
     }
 
-    public static Map<String, Object> reconciliation(List<NormalizedTxn> ledger) {
-        throw new UnsupportedOperationException("reconciliation is not implemented");
+    public static Map<String, Object> reconciliation(
+            List<ParsedTxn> transactions,
+            Map<String, Object> expectedAccounts) {
+
+        List<Object> discrepancies = new ArrayList<>();
+
+        for (String acct : new TreeSet<>(expectedAccounts.keySet())) {
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> expected =
+                    (Map<String, Object>) expectedAccounts.get(acct);
+
+            BigDecimal openingBalance =
+                    new BigDecimal(expected.get("opening_balance").toString());
+
+            /*
+             * For reconciliation, multiple messages can describe the same
+             * real-world transaction.
+             *
+             * In particular, an SMS and an email can use different timezone
+             * representations of the same transaction. When two parsed
+             * transactions represent the same account, direction, amount,
+             * merchant and instant, keep only one. Prefer the message that
+             * contains a stated bank balance because it gives us the
+             * information needed for reconciliation.
+             */
+            Map<String, ParsedTxn> uniqueTransactions = new LinkedHashMap<>();
+
+            for (ParsedTxn t : transactions) {
+
+                String key =
+                        t.accountLast4()
+                                + "|"
+                                + t.occurredAt().toInstant()
+                                + "|"
+                                + t.direction()
+                                + "|"
+                                + t.amount()
+                                + "|"
+                                + t.merchant();
+
+                ParsedTxn existing = uniqueTransactions.get(key);
+
+                if (existing == null
+                        || (existing.statedBalance() == null
+                        && t.statedBalance() != null)) {
+
+                    uniqueTransactions.put(key, t);
+                }
+            }
+
+            List<ParsedTxn> accountTransactions =
+                    uniqueTransactions.values()
+                            .stream()
+                            .filter(t -> acct.equals(t.accountLast4()))
+                            .sorted(Comparator.comparing(ParsedTxn::occurredAt))
+                            .toList();
+
+            BigDecimal runningBalance = openingBalance;
+
+            for (ParsedTxn t : accountTransactions) {
+
+                BigDecimal expectedBalance;
+
+                if (t.direction() == Direction.CREDIT) {
+                    expectedBalance = runningBalance.add(t.amount());
+                } else {
+                    expectedBalance = runningBalance.subtract(t.amount());
+                }
+
+                if (t.statedBalance() != null
+                        && expectedBalance.compareTo(t.statedBalance()) != 0) {
+
+                    BigDecimal unexplained =
+                            expectedBalance
+                                    .subtract(t.statedBalance())
+                                    .abs();
+
+                    if (unexplained.compareTo(ZERO) > 0) {
+
+                        Map<String, Object> discrepancy =
+                                new LinkedHashMap<>();
+
+                        discrepancy.put(
+                                "account_last4",
+                                acct
+                        );
+
+                        discrepancy.put(
+                                "occurred_at",
+                                t.occurredAt().toString()
+                        );
+
+                        discrepancy.put(
+                                "amount",
+                                unexplained.toPlainString()
+                        );
+
+                        discrepancy.put(
+                                "note",
+                                "Bank-stated balance does not match the "
+                                        + "balance explained by the preceding "
+                                        + "ledger transactions."
+                        );
+
+                        discrepancies.add(discrepancy);
+                    }
+                }
+
+                /*
+                 * If the bank supplied a balance, trust that observed balance
+                 * as the new starting point for the next transaction.
+                 *
+                 * Otherwise continue from the balance calculated from the
+                 * transaction itself.
+                 */
+                if (t.statedBalance() != null) {
+                    runningBalance = t.statedBalance();
+                } else {
+                    runningBalance = expectedBalance;
+                }
+            }
+        }
+
+        Map<String, Object> doc = new LinkedHashMap<>();
+        doc.put("discrepancies", discrepancies);
+
+        return doc;
     }
 
     public static Map<Category, BigDecimal> byCategory(List<NormalizedTxn> ledger) {
