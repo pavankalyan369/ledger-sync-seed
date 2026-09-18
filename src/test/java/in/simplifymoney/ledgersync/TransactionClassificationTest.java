@@ -4,8 +4,8 @@ import in.simplifymoney.ledgersync.ingest.IngestService;
 import in.simplifymoney.ledgersync.model.Category;
 import in.simplifymoney.ledgersync.model.NormalizedTxn;
 import in.simplifymoney.ledgersync.parse.Parsers;
-import in.simplifymoney.ledgersync.store.LedgerStore;
 import org.junit.jupiter.api.Test;
+import in.simplifymoney.ledgersync.store.LedgerStore;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
