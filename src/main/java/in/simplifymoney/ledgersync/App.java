@@ -27,10 +27,15 @@ public final class App {
     private static final Path DB = Path.of("data", "ledger");
     private static final Path MIGRATIONS = Path.of("db", "migration");
 
+    static String usage() {
+        return "usage: migrate | ingest <corpus.jsonl> | report <out-dir> | backfill | check";
+    }
+
     public static void main(String[] args) throws Exception {
+
+
         if (args.length == 0) {
-            System.err.println(
-                    "usage: migrate | ingest <corpus.jsonl> | report <out-dir> | backfill | check"            );
+            System.err.println(usage());
             System.exit(2);
         }
 
