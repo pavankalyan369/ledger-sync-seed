@@ -54,11 +54,6 @@ public final class IngestService {
 
             Optional<ParsedTxn> p = parsers.parse(m);
 
-/*            if (p.isEmpty()) {
-                skipped++;
-                continue;
-            }*/
-
             if (p.isEmpty()) {
                 skipped++;
 
@@ -76,7 +71,6 @@ public final class IngestService {
 
             String key = transactionKey(txn);
 
-            //temp
             if (uniqueTransactions.containsKey(key)) {
                 NormalizedTxn existing = uniqueTransactions.get(key);
 
