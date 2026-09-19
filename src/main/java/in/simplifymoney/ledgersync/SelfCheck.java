@@ -9,8 +9,10 @@ import in.simplifymoney.ledgersync.store.InMemoryLedgerStore;
 import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Runs the whole pipeline in memory against fixtures/corpus-a.jsonl and prints
@@ -56,14 +58,33 @@ public final class SelfCheck {
 
             BigDecimal running = opening;
             long n = 0;
+
+            Set<String> seen = new HashSet<>();
+
             for (NormalizedTxn t : ledger) {
                 if (!t.accountLast4().equals(e.getKey())) continue;
+
+                String balanceKey = String.join("|",
+                        t.accountLast4(),
+                        t.occurredAt().toInstant().toString(),
+                        t.direction().name(),
+                        t.amount().toPlainString(),
+                        t.merchant()
+                );
+
+                // Avoid counting the same transaction represented with different time offsets.
                 n++;
+
+                if (!seen.add(balanceKey)) {
+                    continue;
+                }
+
                 running = switch (t.direction()) {
                     case DEBIT -> running.subtract(t.amount());
                     case CREDIT -> running.add(t.amount());
                 };
             }
+
             System.out.printf("  **%s  txns %d (expected %s)%n",
                     e.getKey(), n, a.get("transactions_expected"));
             System.out.printf("           balance from ledger %s, bank says %s, difference %s%n",
