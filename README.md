@@ -92,7 +92,7 @@ output/
 `ledger.json` contains normalized transactions.
 `summary.json` contains account-level spend/income, micro-transaction, and transfer totals.
 `reconciliation.json` records bank-vs-ledger discrepancies. For corpus-A:
-```json
+```text
 {
   "discrepancies": [
     {
@@ -569,3 +569,4 @@ ledger-sync-seed/
 ## Status
 Core parsing, ingestion, deduplication, classification, SQL persistence, reconciliation, DynamoDB persistence, backfill, consistency checking, tests, and the end-to-end demo are implemented and verified against corpus-A.
 The 100k DynamoDB benchmark has been measured. Remaining work is external submission packaging, the walkthrough recording, and the updated CV.
+
