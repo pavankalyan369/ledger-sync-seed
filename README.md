@@ -1,6 +1,7 @@
 # Ledger Sync — Backend Engineer / Intern Take-Home
 A Java 21 CLI that parses transaction messages from SMS/email, normalizes and deduplicates them, classifies transactions, persists them to SQL, reconciles bank-stated balances, and mirrors the ledger into DynamoDB.
 The implementation focuses on correctness, idempotency, explainable reconciliation, and the required DynamoDB access patterns.
+
 ---
 ## 1. Quick Start
 ### Prerequisites
@@ -58,6 +59,7 @@ SMS / Email JSONL
  Consistency Check
 ```
 The same normalized transaction model is used across SQL and DynamoDB.
+
 ---
 ## 3. Corpus-A Results
 The final verifier produces:
@@ -80,6 +82,7 @@ transactions       expected 257, produced 257
                    difference         0.00
 ```
 The ₹7,500 discrepancy for account `4821` is intentionally reported. The system does not modify transactions just to force the ledger to match the bank-stated balance.
+
 ---
 ## 4. Output Files
 `report output` creates:
@@ -127,7 +130,7 @@ Ingestion intentionally preserves the original `OffsetDateTime` representation r
 9075 -> 91
 ```
 Reconciliation separately considers equivalent instants so an SMS/email representation of the same event does not create a false balance discrepancy.
-This separates **\*\*ingestion identity\*\*** from **\*\*reconciliation identity\*\***.
+This separates **ingestion identity** from **reconciliation identity**.
 ---
 ## 7. Classification
 ### MICRO
@@ -150,6 +153,7 @@ Corpus-A transfer total:
 62000.00
 ```
 A `NEFT SELF` credit is not automatically classified as a transfer unless it matches the transfer rules.
+
 ---
 ## 8. Incident Fix: Whole-Rupee Amounts
 A parser incident occurred because an amount such as:
@@ -163,15 +167,17 @@ Rs.5
 INR 25
 ```
 The affected WATER CAN SQL seed value was also corrected.
-**\*\*Lesson:\*\*** financial parsers should not assume every amount contains two decimal places.
+**Lesson:** financial parsers should not assume every amount contains two decimal places.
 ---
 ## 9. Reconciliation
 For each account:
 1. Transactions are ordered chronologically.
 2. A running ledger balance is calculated.
 3. Bank-stated balances are compared against the running balance.
-4. Differences are reported instead of hidden.
+4. Differences are reported instead of hidden. 
+
 For corpus-A this produces the documented ₹7,500 discrepancy for account `4821`.
+
 ---
 # 10. DynamoDB Design
 DynamoDB Local is used for reproducible assignment execution.
@@ -195,6 +201,7 @@ gsi1pk = ACCOUNT#<account>#MONTH#<yyyy-MM>
 gsi1sk = <occurredAt>
 ```
 This supports account/month queries without scanning the base table.
+
 ---
 ## 10. Document Model
 ### Transaction
@@ -220,6 +227,7 @@ pk = TOTALS#<account>
 sk = TOTALS
 ```
 Category totals are maintained incrementally.
+
 ---
 ## 11. Idempotency and Atomicity
 `save()` first performs a direct transaction-key lookup.
@@ -236,6 +244,7 @@ The category total uses:
 if_not_exists(#category, :zero) + :amount
 ```
 This prevents duplicate writes and keeps transaction, message mappings, and totals atomic.
+
 ---
 ## 12. DynamoDB Access Patterns
 ### Q1 — Account + month transactions
@@ -262,29 +271,28 @@ No transaction scan is required.
 ### Read measurement
 DynamoDB exposes `ScannedCount`/`Count` for Q1 because it is a Query.
 Q2 and Q3 use `GetItem`, which does not expose those metrics. Therefore the benchmark should report actual direct-read semantics:
-\| Access pattern | DynamoDB operation | Items examined/read | Items returned |
-\|---|---|---:|---:|
-\| Account + month | GSI Query | 3,277 | 3,277 transactions |
-\| Category totals | GetItem | 1 | 1 totals item |
-\| Message → transaction | 2 × GetItem | 2 | 1 transaction |
+
+| Access pattern | DynamoDB operation | Items examined/read | Items returned |
+|---|---|---:|---:|
+| Account + month | GSI Query | 3,277 | 3,277 transactions |
+| Category totals | GetItem | 1 | 1 totals item |
+| Message → transaction | 2 × GetItem | 2 | 1 transaction |
 ### 100k benchmark
 `DynamoDbBenchmarkTest` provides a reproducible local benchmark using
 100,000 synthetic transaction writes against DynamoDB Local.
+
 Measured results:
-- Account + month: 3,277 items examined and 3,277 returned.
-- Category totals: 1 direct item read and 1 totals item returned.
-- Message ID → transaction: 2 direct item reads and 1 transaction returned.
-The benchmark measures DynamoDB item examination/read counts, not latency.
-The benchmark is intentionally a local reproducibility measurement.
-It should not be interpreted as a production AWS latency, throughput, or
-capacity guarantee.
-The synthetic workload uses deterministic values so the test can be rerun.
-The 100,000 writes are not a claim that 100,000 unique transaction items were
-persisted: the synthetic transaction identity can repeat for generated values.
-The Q1 result is the observed result for the benchmark's selected account/month
-query and is not the size of the complete synthetic dataset.
-It is intentionally kept separate from the normal functional test suite
-because loading the synthetic dataset takes several minutes.
+- Account + month: 3,277 examined, 3,277 returned.
+- Category totals: 1 read, 1 returned.
+- Message ID → transaction: 2 reads, 1 returned.
+
+The benchmark measures DynamoDB item read counts, not latency, throughput, or
+production AWS capacity. The synthetic workload is deterministic and can be
+rerun. The 100,000 writes do not imply 100,000 unique transactions.
+
+The Q1 result represents the selected account/month query, not the full dataset.
+The benchmark is separate from the functional test suite because it takes several
+minutes to run.
 ---
 ## 13. Backfill
 Backfill reads SQL transactions and writes them through `DocumentStore`.
@@ -301,6 +309,7 @@ skip duplicates
 DynamoDB save()
 ```
 Running backfill twice is intentionally supported and is part of `demo.sh`.
+
 ---
 ## 14. Consistency Checker
 The checker compares SQL transactions with DynamoDB using source-message IDs.
@@ -311,8 +320,9 @@ It checks:
 - amount
 - category
 - merchant
-It reports missing mappings and field divergence.
-Legacy rows without source-message IDs are skipped because they cannot be reliably mapped to an individual source message.
+
+It reports missing mappings and field divergence. Legacy rows without source-message IDs are skipped because they cannot be reliably mapped to an individual source message.
+
 ---
 ## 15. Testing
 Run:
@@ -330,37 +340,50 @@ Coverage includes:
 - backfill
 - consistency checking
 - CLI/report regressions
+
 `demo.sh` also exercises the main end-to-end workflow.
+
 ---
 ## 16. Decision Log
 ### 1. Java 21
 Used as the project runtime and LTS Java baseline.
+
 ### 2. Plain Java CLI
 Keeps the assignment focused on ingestion, storage, reconciliation, and correctness.
+
 ### 3. SQL as initial ledger
 Provides a simple durable source for backfill and verification.
+
 ### 4. DynamoDB document store
 Fits the required key-based access patterns.
+
 ### 5. Account/month GSI
 Models the primary query directly instead of scanning transactions.
+
 ### 6. Message mapping items
 Makes message-ID lookup a direct key operation.
+
 ### 7. Pre-aggregated totals
 Avoids recalculating category totals from every transaction.
+
 ### 8. DynamoDB transactions
 Keeps transaction, message mappings, and totals atomic.
+
 ### 9. Explicit reconciliation
 Reports unexplained balances instead of modifying ledger data.
+
 ### 10. Source provenance
 Retains message IDs for traceability and consistency checks.
+
 ---
 ## 17. Data-Driven Decisions
 The supplied corpus influenced several choices:
-- **\*\*Whole-rupee amounts:\*\*** required support for `Rs.5`.
-- **\*\*Multiple representations:\*\*** SMS/email versions required duplicate handling.
-- **\*\*Micro-transactions:\*\*** small UPI debits motivated the `MICRO` rule.
-- **\*\*Self transfers:\*\*** matching account movements motivated explicit transfer rules.
-- **\*\*Bank-stated balance:\*\*** the corpus contains a real discrepancy, so reconciliation exposes it.
+
+- **Whole-rupee amounts:** required support for `Rs.5`.
+- **Multiple representations:** SMS/email versions required duplicate handling.
+- **Micro-transactions:** small UPI debits motivated the `MICRO` rule.
+- **Self transfers:** matching account movements motivated explicit transfer rules.
+- **Bank-stated balance:** the corpus contains a real discrepancy, so reconciliation exposes it.
 ---
 ## 18. AI Disclosure
 AI assistance was used for debugging, implementation discussion, and documentation.
@@ -387,17 +410,10 @@ AI suggestions were validated against actual tests and corpus results.
 - The project intentionally does not add authentication, HTTP APIs, or production deployment infrastructure.
 ---
 ## 20. Submission Artifacts
-Include:
-- Public repository URL
-- Walkthrough recording
-- `ledger.json`
-- `summary.json`
-- `reconciliation.json`
-- Five-line incident note
-- Track teardown
-- Common assignment PDF
-- Updated CV
-The README documents setup, execution, solution approach, storage model, decisions, testing, limitations, AI disclosure, and unfinished work.
+
+The README documents setup, execution, solution approach, storage model,
+decisions, testing, limitations, AI disclosure, and unfinished work.
+
 ---
 ## 21. Final Verification
 
@@ -522,28 +538,9 @@ incident/INC-2026-09-11-resolution.md
 
 ### Repository verification
 
-Before the final README commit:
-
-```bash
-git status
-git log --oneline --decorate -25
-```
-
-The implementation artifacts, generated reports, incident note, and benchmark
-should already be committed. The README should be the remaining intentional
-documentation change.
-
-After the README commit, run:
-
-```bash
-git status
-```
-
-and confirm that no temporary or unintended files remain.
-
-The repository is ready for publication when the demo, test suite, verifier,
-corpus checkpoints, idempotency checks, consistency check, generated artifacts,
-and measured benchmark all match the documented results.
+The 100k DynamoDB benchmark has been measured. The repository contains the
+implemented solution, generated corpus-A artifacts, incident documentation,
+tests, benchmark, and submission documentation.
 
 ## 22. Repository Structure
 ```text
@@ -568,5 +565,4 @@ ledger-sync-seed/
 ```
 ## Status
 Core parsing, ingestion, deduplication, classification, SQL persistence, reconciliation, DynamoDB persistence, backfill, consistency checking, tests, and the end-to-end demo are implemented and verified against corpus-A.
-The 100k DynamoDB benchmark has been measured. Remaining work is external submission packaging, the walkthrough recording, and the updated CV.
-
+The 100k DynamoDB benchmark has been measured.
