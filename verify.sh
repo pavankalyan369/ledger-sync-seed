@@ -6,4 +6,4 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 echo "==> running self-check"
-./gradlew.bat selfCheck "$@"
+./gradlew selfCheck "$@"
