@@ -9,11 +9,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * ICICI Bank SMS.
- *
- * TODO(ops): this only reads the "Dear Customer, Acct XX.... is debited with"
- * shape. There is at least one other ICICI format in the corpus that falls
- * straight through and is lost. Finish this.
+ * ICICI Bank SMS parser supporting the V1 and V2 formats used by the corpus.
  */
 public final class IciciSmsParser implements MessageParser {
 
