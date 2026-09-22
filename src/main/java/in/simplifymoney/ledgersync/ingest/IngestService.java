@@ -309,15 +309,10 @@ public final class IngestService {
     /**
      * Deduplication key.
      *
-     * toInstant() is important because the same transaction can be
-     * represented using different timezone offsets.
+     * The original OffsetDateTime representation is preserved here because
+     * ingestion identity and reconciliation identity have different requirements.
      *
-     * Example:
-     * 2026-07-19T00:20+05:30
-     * and
-     * 2026-07-18T18:50Z
-     *
-     * represent the same instant.
+     * Reconciliation separately considers equivalent instants.
      */
     private String transactionKey(NormalizedTxn txn) {
         return txn.accountLast4()
