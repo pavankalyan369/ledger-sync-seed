@@ -116,6 +116,7 @@ ICICI Bank Acct XX9075 Dr INR 5 on 23-Jul-2026 18:41; UPI/BARBER...
 ```
 The email parser extracts date, subject, account, debit/credit direction, amount, merchant, and remarks.
 All parsers produce the same `NormalizedTxn` model.
+
 ---
 ## 6. Deduplication
 Transaction identity is:
@@ -131,6 +132,7 @@ Ingestion intentionally preserves the original `OffsetDateTime` representation r
 ```
 Reconciliation separately considers equivalent instants so an SMS/email representation of the same event does not create a false balance discrepancy.
 This separates **ingestion identity** from **reconciliation identity**.
+
 ---
 ## 7. Classification
 ### MICRO
@@ -168,6 +170,7 @@ INR 25
 ```
 The affected WATER CAN SQL seed value was also corrected.
 **Lesson:** financial parsers should not assume every amount contains two decimal places.
+
 ---
 ## 9. Reconciliation
 For each account:
@@ -293,6 +296,7 @@ rerun. The 100,000 writes do not imply 100,000 unique transactions.
 The Q1 result represents the selected account/month query, not the full dataset.
 The benchmark is separate from the functional test suite because it takes several
 minutes to run.
+
 ---
 ## 13. Backfill
 Backfill reads SQL transactions and writes them through `DocumentStore`.
@@ -400,6 +404,7 @@ Ingestion preserves the original `OffsetDateTime`; reconciliation separately han
 ### Reason
 Tests and corpus output showed that ingestion identity and reconciliation identity have different requirements.
 AI suggestions were validated against actual tests and corpus results.
+
 ---
 ## 19. Known Limitations
 - The 100k DynamoDB benchmark has been measured against DynamoDB Local; it is a reproducibility measurement, not a production latency benchmark.
